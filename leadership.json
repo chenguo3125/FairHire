@@ -32,7 +32,20 @@
     "club leader",
     "chapter lead",
     "head",
-    "supervisor"
+    "supervisor",
+    "engineer",
+    "engineers",
+    "engineering",
+    "developer",
+    "developers",
+    "scientist",
+    "scientists",
+    "researcher",
+    "researchers",
+    "analyst",
+    "analysts",
+    "designer",
+    "designers"
   ],
   "action_verbs": [
     "architected",
