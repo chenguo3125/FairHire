@@ -422,9 +422,22 @@ def scrub_and_mask(sentence: str) -> str:
     return masked
 
 
-def scrub_and_frame(sentence: str) -> ResumeAchievement:
-    masked, _ = scrub_sentence(sentence)
-    doc = NLP(masked)
+def scrub_resume_document(text: str) -> Tuple[str, Dict[str, Any]]:
+    """
+    Scrub a full resume: multiple sentences and paragraphs in one string.
+
+    Implementation is the same as ``scrub_sentence``; the name makes document-level
+    use explicit for Agent 3 and evaluation pipelines.
+    """
+    return scrub_sentence(text)
+
+
+def frame_sentence(sentence: str) -> ResumeAchievement:
+    """
+    Extract a ResumeAchievement frame from text WITHOUT scrubbing.
+    Used by Agent 2 when scoring raw (baseline) text.
+    """
+    doc = NLP(sentence)
 
     action_verb = None
     role = None
@@ -463,13 +476,18 @@ def scrub_and_frame(sentence: str) -> ResumeAchievement:
                 technical_skills.append(" ".join(tok.text for tok in span_tokens))
                 used_ranges.append((start, end))
 
-    impact_metric = _extract_impact_metric(masked)
+    impact_metric = _extract_impact_metric(sentence)
     return ResumeAchievement(
         action_verb=action_verb,
         role=role,
         technical_skills=technical_skills,
         impact_metric=impact_metric,
     )
+
+
+def scrub_and_frame(sentence: str) -> ResumeAchievement:
+    masked, _ = scrub_sentence(sentence)
+    return frame_sentence(masked)
 
 
 # ---------------------------------------------------------------------------
