@@ -10,12 +10,15 @@ Or:
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
 from agent1_scrubber import DEMOGRAPHICS, scrub_and_mask, scrub_resume_document, scrub_sentence
 from agent2_grader import grade_resume_mode
 from agent3_auditor import audit_counterfactual_fairness
 from category_dimensions import missing_mappings_for_ontology_keys
+from kaggle_resume_data import load_labeled_resume_texts
 from resume_samples import RESUME_MIXED_DEMOGRAPHIC, RESUME_TECHNICAL_ONLY
 
 
@@ -184,6 +187,23 @@ EXTRA_SCRUB_EXAMPLES = [
     # Long achievement
     "Led a team of five engineers to migrate legacy monolith to Docker, cutting costs by 30%.",
 ]
+
+
+class TestKaggleResumeCsvSniff(unittest.TestCase):
+    """CSV column sniffing for Kaggle-style Category + Resume tables."""
+
+    def test_load_labeled_from_temp_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            body = "word " * 15  # > min_chars
+            (root / "sample.csv").write_text(
+                f"Category,Resume_str\nData Science,{body}\n",
+                encoding="utf-8",
+            )
+            pairs = load_labeled_resume_texts(root, max_rows=10)
+        self.assertEqual(len(pairs), 1)
+        self.assertIn("Data Science", pairs[0][0])
+        self.assertEqual(pairs[0][1].strip(), body.strip())
 
 
 class TestExtraScrubSmoke(unittest.TestCase):

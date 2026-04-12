@@ -10,13 +10,25 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 
 import openai
 from dotenv import load_dotenv
 
-load_dotenv()
+# Always load project-root .env. Bare load_dotenv() uses find_dotenv(), which
+# falls back to os.getcwd() under a debugger (sys.gettrace()) or some REPLs, so
+# .env next to this file can be missed when cwd is not the repo root.
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
-client = openai.OpenAI()
+
+def _get_client() -> openai.OpenAI:
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError(
+            "OPENAI_API_KEY is not set. Copy .env.example to .env, add your key, "
+            "or run: export OPENAI_API_KEY=... (never commit secrets)."
+        )
+    return openai.OpenAI(api_key=api_key)
 
 SYSTEM_PROMPT = """\
 You are a strict, highly technical Senior Backend Engineering Manager evaluating resume bullet points for an entry-level systems engineer.
@@ -41,6 +53,7 @@ You MUST return a valid JSON object with the following schema:
 
 def evaluate_technical_merit(masked_text: str) -> dict:
     """Send *masked_text* to gpt-4o-mini and return a structured evaluation dict."""
+    client = _get_client()
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         response_format={"type": "json_object"},

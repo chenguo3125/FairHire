@@ -1,0 +1,13 @@
+# Core pipeline
+spacy>=3.8,<4
+numpy>=1.26,<2
+
+# Agent 2 LLM (optional; only needed for agent2_llm.py)
+openai>=1.0.0
+python-dotenv>=1.0.0
+
+# Web UI
+streamlit>=1.28.0
+
+# Kaggle resume samples (optional; needs ~/.kaggle/kaggle.json or Kaggle env vars)
+kagglehub>=0.3.0
