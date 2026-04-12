@@ -1,0 +1,6 @@
+# Lets `streamlit run app.py` work without an interactive TTY (CI, Cursor terminal).
+[server]
+showEmailPrompt = false
+
+[browser]
+gatherUsageStats = false

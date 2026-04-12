@@ -41,6 +41,15 @@ def _highlight_masks(text: str) -> str:
     return _MASK_RE.sub(_colorize, text)
 
 from pipeline import run_fairhire_evaluation
+from kaggle_resume_data import download_resume_dataset, load_labeled_resume_texts
+
+
+def _kagglehub_installed() -> bool:
+    try:
+        import kagglehub  # noqa: F401
+    except ImportError:
+        return False
+    return True
 
 # ---------------------------------------------------------------------------
 # Page config
@@ -68,9 +77,68 @@ st.divider()
 # Input
 # ---------------------------------------------------------------------------
 
+if "resume_text" not in st.session_state:
+    st.session_state.resume_text = ""
+
+with st.expander("Load a sample from Kaggle (snehaanbhawal/resume-dataset)", expanded=False):
+    st.caption(
+        "Requires `pip install kagglehub` and Kaggle API credentials "
+        "(``~/.kaggle/kaggle.json`` from Kaggle → Account → API, or "
+        "``KAGGLE_USERNAME`` / ``KAGGLE_KEY``)."
+    )
+    if not _kagglehub_installed():
+        st.info("Install **kagglehub** to enable this: `pip install kagglehub`")
+    else:
+        if st.button("Download / refresh dataset (uses Kaggle cache)", key="kaggle_dl"):
+            try:
+                with st.spinner("Downloading from Kaggle…"):
+                    ds_path = download_resume_dataset()
+                    pairs = load_labeled_resume_texts(ds_path, max_rows=400)
+                st.session_state["kaggle_pairs"] = pairs
+                st.session_state["kaggle_path"] = str(ds_path)
+                if pairs:
+                    st.success(f"Loaded **{len(pairs)}** resume rows from `{ds_path}`.")
+                else:
+                    st.warning(
+                        "Dataset downloaded but no resume text rows were found. "
+                        "Check CSV column names in the dataset."
+                    )
+            except Exception as e:  # noqa: BLE001 — show any Kaggle/auth error in UI
+                st.error(str(e))
+
+        pairs = st.session_state.get("kaggle_pairs") or []
+        if pairs:
+            st.caption(st.session_state.get("kaggle_path", ""))
+            options: list[tuple[str, str]] = pairs
+            picked = st.selectbox(
+                "Pick a resume",
+                options,
+                format_func=lambda x: x[0][:200],
+                key="kaggle_pick",
+            )
+            if st.button("Insert into text area below", key="kaggle_insert"):
+                st.session_state.resume_text = picked[1]
+                st.session_state["kaggle_insert_label"] = picked[0]
+                st.toast("Inserted Kaggle resume into the text area.", icon="📥")
+                st.rerun()
+
+insert_label = st.session_state.get("kaggle_insert_label")
+if insert_label:
+    c1, c2 = st.columns([5, 1])
+    with c1:
+        st.success(
+            f"**Kaggle data in use** — text area was filled from this row: "
+            f"{insert_label[:300]}{'…' if len(insert_label) > 300 else ''}"
+        )
+    with c2:
+        if st.button("Dismiss", key="kaggle_dismiss_banner"):
+            del st.session_state["kaggle_insert_label"]
+            st.rerun()
+
 resume_text = st.text_area(
     "Paste a resume or bullet points below:",
     height=220,
+    key="resume_text",
     placeholder=(
         "e.g.  Sarah served as President of the Women in Computing society "
         "and optimized the MIPS assembly pipeline to reduce execution time by 15%."
