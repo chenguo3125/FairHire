@@ -210,5 +210,27 @@
     "posix",
     "unix",
     "systemd"
+  ],
+  "general_stem_fields": [
+    "computing",
+    "computer science",
+    "technology",
+    "information technology",
+    "software",
+    "hardware",
+    "data science",
+    "cybersecurity",
+    "cyber security",
+    "robotics",
+    "artificial intelligence",
+    "machine learning",
+    "stem",
+    "tech",
+    "coding",
+    "code",
+    "programming",
+    "informatics",
+    "bioinformatics",
+    "computational"
   ]
 }

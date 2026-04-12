@@ -432,18 +432,43 @@ def scrub_resume_document(text: str) -> Tuple[str, Dict[str, Any]]:
     return scrub_sentence(text)
 
 
+_MASK_PLACEHOLDERS: Dict[str, str] = {
+    "[CANDIDATE_NAME]": "Candidate",
+    "[STEM_AFFINITY_GROUP]": "",
+    "[TITLE_DEMOGRAPHIC]": "They",
+    "[AFFINITY_GROUP]": "",
+    "[SOCIO_ECONOMIC_STATUS]": "",
+    "[RACE_ETHNICITY_CULTURE]": "",
+    "[RELIGION_FAITH]": "",
+    "[GENDER_IDENTITY_ORIENTATION]": "",
+    "[DISABILITY_NEURODIVERSITY]": "",
+    "[VETERAN_MILITARY_AFFILIATION]": "",
+}
+
+_MASK_PATTERN = re.compile(r"\[[A-Z_]+\]")
+
+
+def _normalize_masks_for_parsing(text: str) -> str:
+    """Replace bracket masks with neutral words so spaCy POS-tags reliably."""
+    def _replace(m: re.Match) -> str:
+        return _MASK_PLACEHOLDERS.get(m.group(0), "")
+    result = _MASK_PATTERN.sub(_replace, text)
+    return re.sub(r"  +", " ", result).strip()
+
+
 def frame_sentence(sentence: str) -> ResumeAchievement:
     """
     Extract a ResumeAchievement frame from text WITHOUT scrubbing.
     Used by Agent 2 when scoring raw (baseline) text.
     """
-    doc = NLP(sentence)
+    parseable = _normalize_masks_for_parsing(sentence)
+    doc = NLP(parseable)
 
     action_verb = None
     role = None
     for tok in doc:
         forms = _token_forms(tok)
-        if action_verb is None and tok.pos_ == "VERB":
+        if action_verb is None and tok.pos_ in {"VERB", "AUX"}:
             if any(form in LEADERSHIP_ACTIONS for form in forms):
                 action_verb = tok.lemma_.capitalize()
         if role is None and tok.pos_ in {"NOUN", "PROPN"}:
@@ -452,7 +477,7 @@ def frame_sentence(sentence: str) -> ResumeAchievement:
 
     if action_verb is None:
         for tok in doc:
-            if tok.pos_ == "VERB":
+            if tok.pos_ in {"VERB", "AUX"}:
                 action_verb = tok.lemma_.capitalize()
                 break
 
@@ -475,6 +500,9 @@ def frame_sentence(sentence: str) -> ResumeAchievement:
             if any(sf in TECHNICAL_TERMS for sf in _span_forms(span_tokens)):
                 technical_skills.append(" ".join(tok.text for tok in span_tokens))
                 used_ranges.append((start, end))
+
+    if not technical_skills and "[STEM_AFFINITY_GROUP]" in sentence:
+        technical_skills.append("STEM engagement")
 
     impact_metric = _extract_impact_metric(sentence)
     return ResumeAchievement(
