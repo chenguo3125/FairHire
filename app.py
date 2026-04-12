@@ -5,7 +5,40 @@ The ONLY backend import is ``run_fairhire_evaluation`` from pipeline.py.
 This file knows nothing about agents, ontologies, or spaCy internals.
 """
 
+import re
+
 import streamlit as st
+
+
+_MASK_COLORS: dict[str, str] = {
+    "CANDIDATE_NAME": "#6C63FF",
+    "STEM_AFFINITY_GROUP": "#E91E63",
+    "TITLE_DEMOGRAPHIC": "#FF9800",
+    "AFFINITY_GROUP": "#E91E63",
+    "SOCIO_ECONOMIC_STATUS": "#009688",
+    "RACE_ETHNICITY_CULTURE": "#F44336",
+    "RELIGION_FAITH": "#9C27B0",
+    "GENDER_IDENTITY_ORIENTATION": "#FF5722",
+    "DISABILITY_NEURODIVERSITY": "#00BCD4",
+    "VETERAN_MILITARY_AFFILIATION": "#795548",
+}
+_DEFAULT_MASK_COLOR = "#607D8B"
+
+_MASK_RE = re.compile(r"(\[[A-Z_]+\])")
+
+
+def _highlight_masks(text: str) -> str:
+    """Replace bracket masks with colour-coded HTML spans."""
+    def _colorize(m: re.Match) -> str:
+        tag = m.group(1)
+        key = tag.strip("[]")
+        color = _MASK_COLORS.get(key, _DEFAULT_MASK_COLOR)
+        return (
+            f'<span style="background-color:{color};color:#fff;'
+            f'padding:2px 6px;border-radius:4px;font-weight:600;'
+            f'font-size:0.85em;">{tag}</span>'
+        )
+    return _MASK_RE.sub(_colorize, text)
 
 from pipeline import run_fairhire_evaluation
 
@@ -71,7 +104,7 @@ if run_button:
 
     with col_mask:
         st.subheader("Masked Text")
-        st.text(result["masked_text"])
+        st.markdown(_highlight_masks(result["masked_text"]), unsafe_allow_html=True)
 
     with st.expander("Extracted JSON payload (masked items & metadata)"):
         st.json(result["extracted_data"])
