@@ -5,8 +5,6 @@ The ONLY backend import is ``run_fairhire_evaluation`` from pipeline.py.
 This file knows nothing about agents, ontologies, or spaCy internals.
 """
 
-import json
-
 import streamlit as st
 
 from pipeline import run_fairhire_evaluation
@@ -80,54 +78,69 @@ if run_button:
 
     st.divider()
 
-    # ── Section 2: AI Evaluation ──────────────────────────────────────────
-    st.header("2 — AI Evaluation (Agent 2: Grader)")
+    # ── Section 2: AI Evaluation (LLM) ───────────────────────────────────
+    st.header("2 — AI Evaluation (Agent 2: LLM Evaluator)")
 
     score_col, just_col = st.columns([1, 2])
 
     with score_col:
         st.metric(
-            label="Fair Score",
+            label="Fair Score (de-biased)",
             value=f"{result['fair_score']} / 100",
             delta=f"{result['fair_score'] - result['baseline_score']:+d} vs baseline",
         )
         st.caption(
-            f"Baseline score (with simulated bias): **{result['baseline_score']}** / 100"
+            f"Baseline (LLM on raw text): **{result['baseline_score']}** / 100"
         )
 
     with just_col:
         st.subheader("Technical Justification")
-        st.info(result["justification"])
+        st.info(result["fair_justification"])
 
-    with st.expander("Fair score breakdown (per-sentence detail)"):
-        st.json(result["fair_breakdown"])
+    fair_strengths = result.get("fair_strengths", [])
+    fair_weaknesses = result.get("fair_weaknesses", [])
 
-    with st.expander("Baseline score breakdown (simulated bias detail)"):
-        st.json(result["baseline_breakdown"])
+    if fair_strengths or fair_weaknesses:
+        str_col, weak_col = st.columns(2)
+        with str_col:
+            st.subheader("Strengths")
+            for s in fair_strengths:
+                st.markdown(f"- {s}")
+        with weak_col:
+            st.subheader("Weaknesses")
+            for w in fair_weaknesses:
+                st.markdown(f"- {w}")
+
+    with st.expander("Baseline evaluation (LLM on raw text)"):
+        st.markdown(f"**Score:** {result['baseline_score']} / 100")
+        st.markdown(f"**Justification:** {result.get('baseline_justification', '')}")
+        bl_str = result.get("baseline_strengths", [])
+        bl_weak = result.get("baseline_weaknesses", [])
+        if bl_str:
+            st.markdown("**Strengths:** " + ", ".join(bl_str))
+        if bl_weak:
+            st.markdown("**Weaknesses:** " + ", ".join(bl_weak))
 
     st.divider()
 
-    # ── Section 3: Auditor Report ─────────────────────────────────────────
-    st.header("3 — Fairness Audit (Agent 3: Auditor)")
+    # ── Section 3: Fairness Audit ─────────────────────────────────────────
+    st.header("3 — Fairness Audit (Agent 3: Counterfactual)")
 
     delta = result["fairness_delta"]
 
     if delta == 0:
         st.success(
-            "**Fairness Delta = 0** — The resume score is identical before and "
-            "after scrubbing. No demographic bias detected in the evaluation."
+            "**Fairness Delta = 0** — The same LLM scored the resume identically "
+            "before and after scrubbing. No demographic bias detected."
         )
     elif delta > 0:
         st.warning(
-            f"**Fairness Delta = +{delta}** — The scrubbed resume scored higher "
-            f"than the raw resume. Agent 1 removed demographic cues that were "
-            f"penalised by the simulated bias model."
+            f"**Fairness Delta = +{delta}** — The scrubbed resume scored higher. "
+            f"The LLM may have been influenced by demographic cues in the raw text."
         )
     else:
         st.error(
-            f"**Fairness Delta = {delta}** — Unexpected: the scrubbed resume scored "
-            f"lower. This may indicate that masking removed content the grader valued."
+            f"**Fairness Delta = {delta}** — The scrubbed resume scored lower. "
+            f"Masking may have removed content the LLM valued, or the raw text "
+            f"received a demographic bonus."
         )
-
-    with st.expander("Full audit report"):
-        st.json(result["audit"])
