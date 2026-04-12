@@ -38,6 +38,7 @@ BASE_DIR = Path(__file__).resolve().parent
 # ---------------------------------------------------------------------------
 
 WSD_RULES: List[Dict[str, Any]] = [
+    # --- Always-preserve ---
     {
         "term": "master",
         "mask": "[TITLE_DEMOGRAPHIC]",
@@ -45,32 +46,92 @@ WSD_RULES: List[Dict[str, Any]] = [
         "mask_if": [],
         "default": "preserve",
     },
+    # --- Graph + ontology disambiguated ---
     {
         "term": "legacy",
         "mask": "[SOCIO_ECONOMIC_STATUS]",
-        "preserve_if": ["head_in_technical", "child_in_technical"],
+        "preserve_if": ["head_in_safe", "child_in_safe"],
         "mask_if": ["head_in_demographic"],
         "default": "mask",
     },
     {
         "term": "free",
         "mask": "[SOCIO_ECONOMIC_STATUS]",
-        "preserve_if": ["head_in_technical", "child_in_technical"],
+        "preserve_if": ["head_in_safe", "child_in_safe"],
         "mask_if": ["head_in_demographic"],
         "default": "preserve",
     },
     {
         "term": "single",
         "mask": "[TITLE_DEMOGRAPHIC]",
-        "preserve_if": ["head_in_technical", "child_in_technical"],
-        "mask_if": ["head_in_demographic"],
+        "preserve_if": ["head_in_safe", "child_in_safe"],
+        "mask_if": ["head_in_demographic", "dep_is_acomp"],
         "default": "preserve",
     },
     {
         "term": "public",
         "mask": "[SOCIO_ECONOMIC_STATUS]",
-        "preserve_if": ["head_in_technical", "child_in_technical", "head_in_leadership"],
+        "preserve_if": ["head_in_safe", "child_in_safe"],
         "mask_if": ["head_in_demographic"],
+        "default": "preserve",
+    },
+    # --- Syntactic-signal rules ---
+    {
+        "term": "miss",
+        "mask": "[TITLE_DEMOGRAPHIC]",
+        "preserve_if": ["head_in_safe", "child_in_safe"],
+        "mask_if": ["next_is_propn"],
+        "default": "preserve",
+    },
+    {
+        "term": "disabled",
+        "mask": "[DISABILITY_NEURODIVERSITY]",
+        "preserve_if": ["head_in_safe", "child_in_safe", "is_sent_start"],
+        "mask_if": [],
+        "default": "preserve",
+    },
+    # --- Standard graph rules ---
+    {
+        "term": "poor",
+        "mask": "[SOCIO_ECONOMIC_STATUS]",
+        "preserve_if": ["head_in_safe", "child_in_safe"],
+        "mask_if": ["head_in_demographic"],
+        "default": "preserve",
+    },
+    {
+        "term": "rich",
+        "mask": "[SOCIO_ECONOMIC_STATUS]",
+        "preserve_if": ["head_in_safe", "child_in_safe"],
+        "mask_if": ["head_in_demographic"],
+        "default": "preserve",
+    },
+    {
+        "term": "blind",
+        "mask": "[DISABILITY_NEURODIVERSITY]",
+        "preserve_if": ["head_in_safe", "child_in_safe"],
+        "mask_if": ["head_in_demographic"],
+        "default": "preserve",
+    },
+    {
+        "term": "elite",
+        "mask": "[SOCIO_ECONOMIC_STATUS]",
+        "preserve_if": ["head_in_safe", "child_in_safe"],
+        "mask_if": ["head_in_demographic"],
+        "default": "mask",
+    },
+    {
+        "term": "steward",
+        "mask": "[TITLE_DEMOGRAPHIC]",
+        "preserve_if": ["head_in_safe", "child_in_safe"],
+        "mask_if": ["head_in_demographic"],
+        "default": "preserve",
+    },
+    # --- Deep-traversal rule ---
+    {
+        "term": "veteran",
+        "mask": "[VETERAN_MILITARY_AFFILIATION]",
+        "preserve_if": ["head_in_safe", "child_in_safe"],
+        "mask_if": ["child_in_demographic", "descendant_in_demographic"],
         "default": "preserve",
     },
 ]
@@ -159,9 +220,10 @@ def _build_phrase_matcher(nlp_model: Any, term_to_category: Dict[str, str]) -> P
     matcher = PhraseMatcher(nlp_model.vocab, attr="LOWER")
     by_category: Dict[str, List[Any]] = {}
     for term, category in term_to_category.items():
-        if " " not in term:
+        doc = nlp_model.make_doc(term)
+        if len(doc) < 2:
             continue
-        by_category.setdefault(category, []).append(nlp_model.make_doc(term))
+        by_category.setdefault(category, []).append(doc)
     for category, patterns in by_category.items():
         if patterns:
             matcher.add(category, patterns)
@@ -274,14 +336,33 @@ class FairHireScrubber:
             for child in token.head.children
         )
 
+    @staticmethod
+    def _iter_descendants(token: Any) -> Iterable[Any]:
+        """Yield every token in the subtree rooted at *token* (excluding itself)."""
+        for child in token.children:
+            yield child
+            yield from FairHireScrubber._iter_descendants(child)
+
     def _eval_wsd_condition(self, condition: str, token: Any) -> bool:
         """
         Evaluate a single declarative WSD condition against the dependency
         graph rooted at *token*.  Every condition is resolved against the
         loaded ontologies — no hardcoded word lists.
+
+        Supported conditions:
+          Graph (ontology-driven):
+            always, head_in_technical, child_in_technical,
+            head_in_leadership, child_in_leadership,
+            head_in_demographic, child_in_demographic,
+            head_in_safe, child_in_safe,
+            descendant_in_demographic
+          Syntactic (POS / dependency):
+            next_is_propn, is_sent_start, dep_is_acomp, dep_is_compound
         """
         if condition == "always":
             return True
+
+        # -- Graph: ontology checks on head / children / descendants ------
 
         if condition == "head_in_technical":
             return self._check_head_with_compounds(token, self.technical_terms)
@@ -318,6 +399,28 @@ class FairHireScrubber:
                 _token_in_set(child, self.safe_terms)
                 for child in token.children
             )
+
+        if condition == "descendant_in_demographic":
+            return any(
+                _token_in_set(desc, self.demographic_terms)
+                for desc in self._iter_descendants(token)
+            )
+
+        # -- Syntactic: POS tags and dependency labels --------------------
+
+        if condition == "next_is_propn":
+            if token.i + 1 < len(token.doc):
+                return token.nbor(1).pos_ == "PROPN"
+            return False
+
+        if condition == "is_sent_start":
+            return token.i == 0 or bool(token.is_sent_start)
+
+        if condition == "dep_is_acomp":
+            return token.dep_ == "acomp"
+
+        if condition == "dep_is_compound":
+            return token.dep_ == "compound"
 
         return False
 
@@ -421,6 +524,10 @@ class FairHireScrubber:
                 continue
 
             # 2b: direct ontology category lookup (unambiguous terms).
+            # Safe-terms override: if the token is also a known technical/leadership
+            # term, preserve it (same principle as the NER override in Pass 3).
+            if _token_in_set(tok, self.safe_terms):
+                continue
             category = (
                 self.demographic_term_to_category.get(low_text)
                 or self.demographic_term_to_category.get(low_lemma)
