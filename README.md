@@ -1,5 +1,13 @@
 # FairHire
 
+## Bullet → paragraph preprocessing (optional)
+
+The Streamlit UI has a checkbox (**Convert bullet lists to continuous paragraphs**).
+When enabled, ``resume_format.bullets_to_prose`` runs before Agent 1 and the LLM so
+list-shaped input (``•``, ``-``, ``1.`` lines) is turned into flowing paragraphs. The
+**Original Text** panel still shows your raw paste; expand **Normalized input** after a
+run to see what the pipeline used.
+
 ## Kaggle resume samples (optional)
 
 The Streamlit UI can load real rows from
