@@ -19,6 +19,7 @@ from agent2_grader import grade_resume_mode
 from agent3_auditor import audit_counterfactual_fairness
 from category_dimensions import missing_mappings_for_ontology_keys
 from kaggle_resume_data import load_labeled_resume_texts
+from resume_format import bullets_to_prose
 from resume_samples import RESUME_MIXED_DEMOGRAPHIC, RESUME_TECHNICAL_ONLY
 
 
@@ -187,6 +188,29 @@ EXTRA_SCRUB_EXAMPLES = [
     # Long achievement
     "Led a team of five engineers to migrate legacy monolith to Docker, cutting costs by 30%.",
 ]
+
+
+class TestBulletToProse(unittest.TestCase):
+    """``resume_format.bullets_to_prose`` turns list lines into paragraphs."""
+
+    def test_merges_glyph_bullets(self) -> None:
+        raw = "• Built APIs in Go\n• Led a team of five\n"
+        out = bullets_to_prose(raw)
+        self.assertEqual(out, "Built APIs in Go. Led a team of five.")
+
+    def test_merges_dash_bullets(self) -> None:
+        raw = "- First item here\n- Second item\n"
+        out = bullets_to_prose(raw)
+        self.assertEqual(out, "First item here. Second item.")
+
+    def test_numbered_list(self) -> None:
+        raw = "1. Alpha work\n2. Beta work\n"
+        out = bullets_to_prose(raw)
+        self.assertEqual(out, "Alpha work. Beta work.")
+
+    def test_no_bullets_returns_stripped(self) -> None:
+        t = "Just a sentence.\n\nAnother paragraph."
+        self.assertEqual(bullets_to_prose(t), t.strip())
 
 
 class TestKaggleResumeCsvSniff(unittest.TestCase):

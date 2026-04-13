@@ -145,6 +145,15 @@ resume_text = st.text_area(
     ),
 )
 
+normalize_bullets = st.checkbox(
+    "Convert bullet lists to continuous paragraphs before evaluation",
+    value=True,
+    help=(
+        "Internal preprocessing: turns • / - / numbered lines into flowing "
+        "paragraphs so the scrubber and LLM see prose instead of list markup."
+    ),
+)
+
 run_button = st.button("Run Evaluation", type="primary", use_container_width=True)
 
 # ---------------------------------------------------------------------------
@@ -169,6 +178,10 @@ if run_button:
     with col_orig:
         st.subheader("Original Text")
         st.text(result["original_text"])
+        if result.get("normalized_bullets_applied") and result.get("normalized_text"):
+            st.caption("Text used by Agent 1 & 2 after bullet → paragraph conversion:")
+            with st.expander("Normalized input (prose)", expanded=False):
+                st.text(result["normalized_text"])
 
     with col_mask:
         st.subheader("Masked Text")
